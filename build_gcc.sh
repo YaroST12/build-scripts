@@ -11,11 +11,11 @@ last_commit=$(git rev-parse --verify --short=10 HEAD)
 # last_commit=$(cat $kernel_dir/.git/refs/heads/${branch_name} | cut -c -12)
 export CONFIG_FILE="mata_user_defconfig"
 export ARCH="arm64"
-export LOCALVERSION="-${branch_name}/${last_commit}/GCC-8.2"
+export LOCALVERSION="-${branch_name}/${last_commit}/GCC-9.0-experimental"
 export KBUILD_BUILD_USER="ST12"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Home PC
-CROSS_COMPILE="${TTHD}/toolchains/build-tools-gcc/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
+CROSS_COMPILE="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 # Colors
 NC='\033[0m'
 RED='\033[0;31m'
