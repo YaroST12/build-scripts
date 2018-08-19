@@ -1,7 +1,11 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Copyright (C) 2018 Yaroslav Furman (YaroST12)
+
 # Export fucking folders
 kernel_dir="${PWD}"
-objdir="${kernel_dir}/out"
+objdir="${kernel_dir}/out_gcc"
 builddir="${kernel_dir}/build"
 # Export fucking fucks
 branch_name=$(git rev-parse --abbrev-ref HEAD)
