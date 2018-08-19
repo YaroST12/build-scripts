@@ -1,4 +1,8 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Copyright (C) 2018 Yaroslav Furman (YaroST12)
+
 # Export fucking folders
 kernel_dir="${PWD}"
 objdir="${kernel_dir}/out"
@@ -36,7 +40,7 @@ compile()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb -j8
+	make -s CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} CONFIG_DEBUG_SECTION_MISMATCH=y Image.gz-dtb -j8
 }
 completion() 
 {
