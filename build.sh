@@ -10,9 +10,6 @@ builddir="${kernel_dir}/build"
 # Export fucking fucks
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
-# Legacy code XD
-# branch_name=$(cat $kernel_dir/.git/HEAD | cut -c 17-)
-# last_commit=$(cat $kernel_dir/.git/refs/heads/${branch_name} | cut -c -12)
 export CONFIG_FILE="mata_user_defconfig"
 export ARCH="arm64"
 export LOCALVERSION="-${branch_name}/${last_commit}/Clang-8.0.3"
@@ -40,7 +37,13 @@ compile()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} CONFIG_DEBUG_SECTION_MISMATCH=y Image.gz-dtb -j8
+	make -s CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb -j8
+}
+compile_gcc()
+{
+	cd ${kernel_dir}
+	echo -e ${LGR} "######### Compiling kernel with GCC #########${NC}"
+	make -s CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb -j8
 }
 completion() 
 {
@@ -58,6 +61,10 @@ completion()
 	fi
 }
 make_defconfig
-compile 
+if [ "$1" == gcc ]; then
+compile_gcc
+else
+compile
+fi
 completion
 cd ${kernel_dir}
