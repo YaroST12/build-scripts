@@ -37,13 +37,13 @@ compile()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb -j8
+	make -s -j8 CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb
 }
 compile_gcc()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "######### Compiling kernel with GCC #########${NC}"
-	make -s CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb -j8
+	make -s -j8 CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb
 }
 completion() 
 {
