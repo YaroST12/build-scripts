@@ -10,15 +10,15 @@ builddir="${kernel_dir}/build"
 # Export fucking fucks
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
-export CONFIG_FILE="mata_user_defconfig"
+export CONFIG_FILE="mata_defconfig"
 export ARCH="arm64"
 export LOCALVERSION="-${branch_name}/${last_commit}/Clang-8.0.3"
 export KBUILD_BUILD_USER="ST12"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Home PC
-CROSS_COMPILE="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
-export CROSS_COMPILE_ARM32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CLANG_TCHAIN="${TTHD}/toolchains/clang-8.x/bin/clang"
+CC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
+CC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
+CT="${TTHD}/toolchains/clang-8.x/bin/clang"
 # Colors
 NC='\033[0m'
 RED='\033[0;31m'
@@ -37,13 +37,15 @@ compile()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s -j8 CC=${CLANG_TCHAIN} CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb
+	make -s -j8 CC=${CT} CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
+	O=${objdir} Image.gz-dtb
 }
 compile_gcc()
 {
 	cd ${kernel_dir}
 	echo -e ${LGR} "######### Compiling kernel with GCC #########${NC}"
-	make -s -j8 CROSS_COMPILE=${CROSS_COMPILE} O=${objdir} Image.gz-dtb
+	make -s -j8 CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
+	O=${objdir} Image.gz-dtb
 }
 completion() 
 {
@@ -68,3 +70,4 @@ compile
 fi
 completion
 cd ${kernel_dir}
+
