@@ -25,7 +25,13 @@ RED='\033[0;31m'
 LRD='\033[1;31m'
 LGR='\033[1;32m'
 YEL='\033[1;33m'
-
+check_everything()
+{
+	if [[ ! -d ${TTHD}/toolchains/ ]] || [[ ! -s ${CT} ]]; then
+		completion "toolchains"
+		exit
+	fi
+}
 make_defconfig()
 {
 	# Needed to make sure we get dtb built and added to kernel image properly
@@ -50,6 +56,8 @@ compile_gcc()
 completion() 
 {
 	cd ${objdir}
+	NO_IMAGE="### Build fuckedup, check warnings/errors ###"
+	NO_TC="### Build fuckedup, toolchains are missing ##"
 	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
@@ -58,10 +66,15 @@ completion()
 		echo -e ${LGR} "#############################################${NC}"
 	else
 		echo -e ${RED} "#############################################"
-		echo -e ${RED} "### Build fuckedup, check warnings/errors ###"
+		if [ "$1" == toolchains ]; then
+			echo -e ${RED} ${NO_TC}
+		else
+			echo -e ${RED} ${NO_IMAGE}
+		fi
 		echo -e ${RED} "#############################################${NC}"
 	fi
 }
+check_everything
 make_defconfig
 if [ "$1" == gcc ]; then
 compile_gcc
