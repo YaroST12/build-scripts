@@ -35,15 +35,23 @@ check_everything()
 make_defconfig()
 {
 	# Needed to make sure we get dtb built and added to kernel image properly
-	rm -rf ${objdir}/arch/arm64/boot/dts/essential/
+	rm -rf ${objdir}/arch/arm64/boot/dts/
 	echo -e ${LGR} "########### Generating Defconfig ############${NC}"
 	make -s ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
 }
 compile()
 {
+	POLLY="-mllvm -polly \
+		-mllvm -polly-run-dce \
+		-mllvm -polly-parallel \
+		-mllvm -polly-run-inliner \
+		-mllvm -polly-opt-fusion=max \
+		-mllvm -polly-ast-use-context \
+		-mllvm -polly-vectorizer=stripmine"
+
 	cd ${kernel_dir}
 	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s -j8 CC=${CT} CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
+	make -s -j8 CC="${CT} ${POLLY}" CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
 	O=${objdir} Image.gz-dtb
 }
 compile_gcc()
