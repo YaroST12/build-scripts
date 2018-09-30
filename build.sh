@@ -12,13 +12,15 @@ branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
 export CONFIG_FILE="mata_defconfig"
 export ARCH="arm64"
-export LOCALVERSION="-${branch_name}/${last_commit}/Clang-8.0.3"
+export LOCALVERSION="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="ST12"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
+
 # Home PC
 CC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 CC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
 CT="${TTHD}/toolchains/clang-8.x/bin/clang"
+
 # Colors
 NC='\033[0m'
 RED='\033[0;31m'
@@ -36,7 +38,7 @@ make_defconfig()
 {
 	# Needed to make sure we get dtb built and added to kernel image properly
 	rm -rf ${objdir}/arch/arm64/boot/dts/
-	echo -e ${LGR} "########### Generating Defconfig ############${NC}"
+	echo -e ${LGR} "\r########### Generating Defconfig ############${NC}"
 	make -s ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
 }
 compile()
@@ -49,15 +51,18 @@ compile()
 		-mllvm -polly-ast-use-context \
 		-mllvm -polly-vectorizer=stripmine"
 
+	export KBUILD_COMPILER_STRING="clang-$($CT --version | \
+	grep "clang version" | cut -c 15-24 | sed -e 's/ //')"
+
 	cd ${kernel_dir}
-	echo -e ${LGR} "##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
+	echo -e ${LGR} "\r##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
 	make -s -j8 CC="${CT} ${POLLY}" CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
 	O=${objdir} Image.gz-dtb
 }
 compile_gcc()
 {
 	cd ${kernel_dir}
-	echo -e ${LGR} "######### Compiling kernel with GCC #########${NC}"
+	echo -e ${LGR} "\r######### Compiling kernel with GCC #########${NC}"
 	make -s -j8 CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
 	O=${objdir} Image.gz-dtb
 }
@@ -69,17 +74,17 @@ completion()
 	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
-		echo -e ${LGR} "#############################################"
-		echo -e ${LGR} "############## Build competed! ##############"
-		echo -e ${LGR} "#############################################${NC}"
+		echo -e ${LGR} "\r#############################################"
+		echo -e ${LGR} "\r############## Build competed! ##############"
+		echo -e ${LGR} "\r#############################################${NC}"
 	else
-		echo -e ${RED} "#############################################"
+		echo -e ${RED} "\r#############################################"
 		if [ "$1" == toolchains ]; then
 			echo -e ${RED} ${NO_TC}
 		else
 			echo -e ${RED} ${NO_IMAGE}
 		fi
-		echo -e ${RED} "#############################################${NC}"
+		echo -e ${RED} "\r#############################################${NC}"
 	fi
 }
 check_everything
