@@ -54,10 +54,12 @@ compile()
 	export KBUILD_COMPILER_STRING="clang-$($CT --version | \
 	grep "clang version" | cut -c 15-24 | sed -e 's/ //')"
 
+	FLASH_CLANG="${YEL}Flash-Clang${LGR}"
+
 	cd ${kernel_dir}
-	echo -e ${LGR} "\r##### Compiling kernel with ${YEL}Flash-Clang${LGR} #####${NC}"
-	make -s -j8 CC="${CT} ${POLLY}" CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
-	O=${objdir} Image.gz-dtb
+	echo -e ${LGR} "\r##### Compiling kernel with ${FLASH_CLANG} #####${NC}"
+	make -s -j8 CC="${CT} ${POLLY}" CROSS_COMPILE=${CC} \
+	CROSS_COMPILE_ARM32=${CC_32} O=${objdir} Image.gz-dtb
 }
 compile_gcc()
 {
