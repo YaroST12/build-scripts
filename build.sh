@@ -38,29 +38,29 @@ function die() {
 }
 
 function parse_parameters() {
-    PARAMS="${*}"
+	PARAMS="${*}"
 	# Default params
 	BUILD_GCC=false
 	CONFIG_FILE="z2_row_defconfig"
 	DEVICE="row"
 	TC="${YEL}Flash-Clang${LGR}"
 
-    while [[ ${#} -ge 1 ]]; do
-        case ${1} in
-            "-p"|"--plus")
+	while [[ ${#} -ge 1 ]]; do
+		case ${1} in
+			"-p"|"--plus")
 				SEP+="#"
 				DEVICE="plus"
-                CONFIG_FILE="z2_plus_defconfig" ;;
+				CONFIG_FILE="z2_plus_defconfig" ;;
 
-            "-g"|"--gcc")
+			"-g"|"--gcc")
 				TC="GCC"
-                BUILD_GCC=true ;;
+				BUILD_GCC=true ;;
 
             *) die "Invalid parameter specified!" ;;
-        esac
+		esac
 
-        shift
-    done
+		shift
+	done
 	if [ ${BUILD_GCC} == false ]; then
 		# Separator needs to be longer
 		SEP+="#######"
