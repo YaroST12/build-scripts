@@ -3,22 +3,22 @@
 #
 # Copyright (C) 2018 Yaroslav Furman (YaroST12)
 
-# Export fucking folders
+# Fucking folders
 kernel_dir="${PWD}"
 objdir="${kernel_dir}/out"
 builddir="${kernel_dir}/build"
-# Export fucking fucks
+# Fucking versioning
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
-export ARCH="arm64"
+cpus=$(nproc --all)
 export LOCALVERSION="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="ST12"
+# Fucking arch and clang triple
+export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
-# CPUs that we have -1 for better UX
-cpus=$(($(nproc --all) - 1))
-# Home PC
-CC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
-CC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
+# Fucking toolchains
+CC="${TTHD}/toolchains/gcc-linaro-7.3.1-aarch64/bin/aarch64-linux-gnu-"
+CC_32="${TTHD}/toolchains/gcc-linaro-7.3.1-arm/bin/arm-linux-gnueabi-"
 CT="${TTHD}/toolchains/clang-8.x/bin/clang"
 
 # Colors
@@ -28,37 +28,76 @@ LRD='\033[1;31m'
 LGR='\033[1;32m'
 YEL='\033[1;33m'
 
-make_defconfig()
+# Separator
+SEP="########################################"
+
+function parse_parameters() {
+    PARAMS="${*}"
+	# Default params
+	BUILD_GCC=false
+	CONFIG_FILE="z2_row_defconfig"
+	DEVICE="row"
+	TC="${YEL}Flash-Clang${LGR}"
+
+    while [[ ${#} -ge 1 ]]; do
+        case ${1} in
+            "-p"|"--plus")
+				DEVICE="plus"
+                CONFIG_FILE="z2_plus_defconfig" ;;
+
+            "-g"|"--gcc")
+				TC="GCC"
+                BUILD_GCC=true ;;
+
+            *) die "Invalid parameter specified!" ;;
+        esac
+
+        shift
+    done
+	if [ ${BUILD_GCC} == false ]; then
+		# Separator needs to be longer
+		SEP+="#######"
+	fi
+	echo -e ${LGR} ${SEP}
+	echo -e ${LGR} "Compilation started for Z2_${DEVICE} with ${TC} ${NC}"
+}
+
+# Formats the time for the end
+function format_time() {
+	MINS=$(((${2} - ${1}) / 60))
+	SECS=$(((${2} - ${1}) % 60))
+
+	TIME_STRING+="${MINS}:${SECS}"
+
+	echo "${TIME_STRING}"
+}
+
+function make_image()
 {
 	# Needed to make sure we get dtb built and added to kernel image properly
-	rm -rf ${objdir}/arch/arm64/boot/dts/
-	echo -e ${LGR} "########### Generating Defconfig ############${NC}"
+	rm -rf ${objdir}/arch/arm64/boot/
+	START=$(date +%s)
+	echo -e ${LGR} "Generating Defconfig ${NC}"
 	make -s ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
-}
-compile()
-{
-	export KBUILD_COMPILER_STRING="clang-$($CT --version | \
-	grep "clang version" | cut -c 15-24 | sed -e 's/ //')"
 
-	FLASH_CLANG="${YEL}Flash-Clang${LGR}"
+	echo -e ${LGR} "Building image ${NC}"
+	if [ ${BUILD_GCC} == true ]; then
+		cd ${kernel_dir}
+		make -s -j${cpus} CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
+		O=${objdir} Image.gz-dtb
+	else
+		export KBUILD_COMPILER_STRING="clang-$($CT --version | \
+		grep "clang version" | cut -c 15-24 | sed -e 's/ //')"
 
-	cd ${kernel_dir}
-	echo -e ${LGR} "##### Compiling kernel with ${FLASH_CLANG} #####${NC}"
-	make -s -j${cpus} CC=${CT} CROSS_COMPILE=${CC} \
-	CROSS_COMPILE_ARM32=${CC_32} O=${objdir} Image.gz-dtb
+		cd ${kernel_dir}
+		make -s -j${cpus} CC=${CT} CROSS_COMPILE=${CC} \
+		CROSS_COMPILE_ARM32=${CC_32} O=${objdir} Image.gz-dtb
+	fi
+	END=$(date +%s)
 }
-compile_gcc()
-{
-	cd ${kernel_dir}
-	echo -e ${LGR} "######### Compiling kernel with GCC #########${NC}"
-	make -s -j${cpus} CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
-	O=${objdir} Image.gz-dtb
-}
-completion() 
+function completion()
 {
 	cd ${objdir}
-	NO_IMAGE="### Build fuckedup, check warnings/errors ###"
-	NO_TC="### Build fuckedup, toolchains are missing ##"
 	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		if [ ${DEVICE} == "plus" ]; then
@@ -66,32 +105,12 @@ completion()
 		else
 			mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb_row
 		fi
-		echo -e ${LGR} "#############################################"
-		echo -e ${LGR} "########## Build for $DEVICE competed! #########"
-		echo -e ${LGR} "#############################################${NC}"
-	else
-		echo -e ${RED} "#############################################"
-		if [ "$1" == toolchains ]; then
-			echo -e ${RED} ${NO_TC}
-		else
-			echo -e ${RED} ${NO_IMAGE}
-		fi
-		echo -e ${RED} "#############################################${NC}"
+		echo -e ${LGR} "Build for Z2_$DEVICE competed in" \
+			"$(format_time "${START}" "${END}")!${NC}"
+		echo -e ${LGR} ${SEP}
 	fi
 }
-if [ "$1" == plus ] || [ "$2" == plus ]; then
-export CONFIG_FILE="z2_plus_defconfig"
-DEVICE="plus"
-else
-export CONFIG_FILE="z2_row_defconfig"
-DEVICE="row"
-fi
-make_defconfig
-if [ "$1" == gcc ]; then
-compile_gcc
-else
-compile
-fi
+parse_parameters "${@}"
+make_image
 completion
 cd ${kernel_dir}
-
