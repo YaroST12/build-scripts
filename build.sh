@@ -93,11 +93,19 @@ function make_image()
 		make -s -j${cpus} CROSS_COMPILE=${CC} CROSS_COMPILE_ARM32=${CC_32} \
 		O=${objdir} Image.gz-dtb
 	else
+		POLLY="-mllvm -polly \
+			-mllvm -polly-run-dce \
+			-mllvm -polly-parallel \
+			-mllvm -polly-run-inliner \
+			-mllvm -polly-opt-fusion=max \
+			-mllvm -polly-ast-use-context \
+			-mllvm -polly-vectorizer=stripmine"
+
 		export KBUILD_COMPILER_STRING="clang-$($CT --version | \
 		grep "clang version" | cut -c 15-24 | sed -e 's/ //')"
 
 		cd ${kernel_dir}
-		make -s -j${cpus} CC=${CT} CROSS_COMPILE=${CC} \
+		make -s -j${cpus} CC="${CT} ${POLLY}" CROSS_COMPILE=${CC} \
 		CROSS_COMPILE_ARM32=${CC_32} O=${objdir} Image.gz-dtb
 	fi
 	END=$(date +%s)
