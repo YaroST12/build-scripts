@@ -5,7 +5,6 @@
 
 # Fucking folders
 kernel_dir="${PWD}"
-objdir="${kernel_dir}/out"
 builddir="${kernel_dir}/build"
 # Fucking versioning
 branch_name=$(git rev-parse --abbrev-ref HEAD)
@@ -44,6 +43,7 @@ function parse_parameters() {
 	CONFIG_FILE="z2_row_defconfig"
 	DEVICE="row"
 	TC="${YEL}Flash-Clang${LGR}"
+	objdir="${kernel_dir}/out"
 
 	while [[ ${#} -ge 1 ]]; do
 		case ${1} in
@@ -53,6 +53,7 @@ function parse_parameters() {
 				CONFIG_FILE="z2_plus_defconfig" ;;
 
 			"-g"|"--gcc")
+				objdir="${kernel_dir}/out_gcc"
 				TC="GCC"
 				BUILD_GCC=true ;;
 
