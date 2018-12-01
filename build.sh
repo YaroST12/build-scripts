@@ -112,12 +112,16 @@ function make_image()
 			-mllvm -polly-ast-use-context \
 			-mllvm -polly-vectorizer=stripmine"
 
-		export KBUILD_COMPILER_STRING="clang-$($CT --version | \
-		grep "clang version" | cut -c 15- | sed -e 's/ (.*//g')"
+		# major version, usually 3 numbers (8.0.5 or 6.0.1)
+		VERSION=$($CT --version | grep -wo "[0-9].[0-9].[0-9]")
+		# revision (?), usually 6 numbers with 'r' before them
+		REVISION=$($CT --version | grep -wo "r[0-9]*")
+		COMPILER_NAME="Flash-Clang-$VERSION-$REVISION"
 
 		cd ${kernel_dir}
 		make -s -j${cpus} CC="${CT} ${POLLY}" CROSS_COMPILE=${GCC} \
-		CROSS_COMPILE_ARM32=${GCC_32} O=${objdir} Image.gz-dtb
+		CROSS_COMPILE_ARM32=${GCC_32} KBUILD_COMPILER_STRING=${COMPILER_NAME} \
+		O=${objdir} Image.gz-dtb
 	fi
 	END=$(date +%s)
 }
