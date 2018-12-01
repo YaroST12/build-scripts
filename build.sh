@@ -104,7 +104,8 @@ function make_image()
 		make -s -j${cpus} CROSS_COMPILE=${GCC} CROSS_COMPILE_ARM32=${GCC_32} \
 		O=${objdir} Image.gz-dtb
 	else
-		POLLY="-mllvm -polly \
+		POLLY="-fopenmp \
+			-mllvm -polly \
 			-mllvm -polly-run-dce \
 			-mllvm -polly-parallel \
 			-mllvm -polly-run-inliner \
