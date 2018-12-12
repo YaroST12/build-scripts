@@ -9,7 +9,6 @@ builddir="${kernel_dir}/build"
 # Fucking versioning
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
-cpus=$(nproc --all)
 export LOCALVERSION="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="ST12"
 # Fucking arch and clang triple
@@ -17,7 +16,7 @@ export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Fucking toolchains
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
-GCC_32="${TTHD}/toolchains/gcc-linaro-7.3.1-arm/bin/arm-linux-gnueabi-"
+GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
 CT="${TTHD}/toolchains/clang-8.x/bin/clang"
 
 # Colors
@@ -27,8 +26,11 @@ LRD='\033[1;31m'
 LGR='\033[1;32m'
 YEL='\033[1;33m'
 
+# CPUs
+cpus=$(nproc --all)
+
 # Separator
-SEP="########################################"
+SEP="######################################"
 function die() {
 	echo -e ${RED} ${SEP}
 	echo -e ${RED} "${1}"
@@ -66,12 +68,8 @@ function parse_parameters() {
 
 		shift
 	done
-	if [ ${BUILD_GCC} == false ]; then
-		# Separator needs to be longer
-		SEP+="#######"
-	fi
 	echo -e ${LGR} ${SEP}
-	echo -e ${LGR} "Compilation started for Z2_${DEVICE} with ${TC} ${NC}"
+	echo -e ${LGR} "Compilation started for Z2_${DEVICE} ${NC}"
 }
 
 # Formats the time for the end
@@ -89,8 +87,9 @@ function make_image()
 	# Needed to make sure we get dtb built and added to kernel image properly
 	# Cleanup existing build files
 	if [ ${BUILD_CLEAN} == true ]; then
+		echo -e ${LGR} "Cleaning up mess... ${NC}"
 	    rm -rf ${objdir}
-		echo -e ${LGR} "Cleaning up mess ${NC}"
+		make -s mrproper
 	else
 	    rm -rf ${objdir}/arch/arm64/boot/
 	fi
@@ -133,7 +132,9 @@ function completion()
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb_${DEVICE}
 		echo -e ${LGR} "Build for Z2_$DEVICE competed in" \
-			"$(format_time "${START}" "${END}")!${NC}"
+			"$(format_time "${START}" "${END}")!"
+		echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
+		echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME} ${NC}"
 		echo -e ${LGR} ${SEP}
 	fi
 }
