@@ -31,6 +31,7 @@ cpus=$(nproc --all)
 
 # Separator
 SEP="######################################"
+
 function die() {
 	echo -e ${RED} ${SEP}
 	echo -e ${RED} "${1}"
@@ -51,7 +52,6 @@ function parse_parameters() {
 	while [[ ${#} -ge 1 ]]; do
 		case ${1} in
 			"-p"|"--plus")
-				SEP+="#"
 				DEVICE="plus"
 				CONFIG_FILE="z2_plus_defconfig" ;;
 
