@@ -1,0 +1,89 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Copyright (C) 2018 Nathan Chancellor
+# Copyright (C) 2018 Yaroslav Furman (YaroST12)
+function die() {
+	echo "${1}"
+	exit
+}
+
+function enforce_value() {
+    [[ ${#} -lt 1 ]] && die "A additional value is needed for one of the flags passed to this script!"
+}
+
+function parse_parameters() {
+	PARAMS="${*}"
+	while [[ ${#} -ge 1 ]]; do
+		case ${1} in
+			"-b"|"--build-only")
+			BUILD_ONLY=true ;;
+
+			"-i"|"--install-folder")
+			shift && enforce_value "${@}"
+			INSTALL_FOLDER=${1} ;;
+
+			*) die "Invalid parameter specified!" ;;
+		esac
+
+        shift
+	done
+	if [[ -z ${INSTALL_FOLDER} ]]; then
+		die "You must specify the install folder"
+	fi
+}
+
+# Build Clang
+WORKING_FOLDER=${HOME}/clang-build
+REPO_FOLDER=${HOME}/clang-build-repos
+THREADS=$(nproc --all)
+
+function clang() {(
+    { cd "${WORKING_FOLDER}" && rm -rf llvm/build && mkdir -p llvm/build && cd llvm/build; } || die "wtf"
+	cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+					-DCMAKE_C_COMPILER=clang \
+					-DCMAKE_C_FLAGS="-O3 -march=native -mtune=native" \
+					-DCMAKE_CXX_COMPILER=clang++ \
+					-DCMAKE_CXX_FLAGS="-O3 -march=native -mtune=native" \
+					-DLLVM_PARALLEL_COMPILE_JOBS="${THREADS}" \
+					-DLLVM_PARALLEL_LINK_JOBS="${THREADS}" \
+					-DLLVM_ENABLE_THREADS=ON \
+					-DCMAKE_INSTALL_PREFIX="${INSTALL_FOLDER}" \
+					-DLLVM_BINUTILS_INCDIR="${WORKING_FOLDER}/binutils/include" \
+					-DLLVM_ENABLE_BINDINGS=OFF \
+					-DLLVM_CCACHE_BUILD=ON \
+					-DLLVM_ENABLE_OCAMLDOC=OFF \
+					-DLLVM_ENABLE_WARNINGS=OFF \
+					-DLLVM_INCLUDE_EXAMPLES=OFF \
+					-DLLVM_INCLUDE_TESTS=OFF \
+					-DLLVM_INCLUDE_DOCS=OFF \
+					-DLLVM_TARGETS_TO_BUILD="ARM;AArch64;PowerPC;X86" \
+					-DLLVM_USE_LINKER=gold "${WORKING_FOLDER}"/llvm
+	time ninja || die "Error building Clang/lld!"
+)}
+
+function update() {
+	if [[ -z ${BUILD_ONLY} ]]; then
+		# Update/clone LLVM/Clang
+		if [[ ! -d ${WORKING_FOLDER}/llvm ]]; then
+			git -C "${WORKING_FOLDER}" clone --single-branch -b master https://git.llvm.org/git/llvm.git
+			git -C "${WORKING_FOLDER}" clone --single-branch -b master https://git.llvm.org/git/clang.git llvm/tools/clang
+			git -C "${WORKING_FOLDER}" clone --single-branch -b master https://git.llvm.org/git/lld.git llvm/tools/lld
+		else
+			for REPO_FOLDER in llvm llvm/tools/clang llvm/tools/lld; do
+		git -C "${WORKING_FOLDER}/${REPO_FOLDER}" pull --rebase || die "Error updating ${REPO_FOLDER}!"
+			done
+		fi
+	fi
+}
+
+# Build Clang, lld. and arm{32,64} from source
+function binaries() {(
+	# Build Clang and lld
+	clang
+	rm -rf "${INSTALL_FOLDER}"
+	ninja -C "${WORKING_FOLDER}/llvm/build" install || die "Error installing Clang/lld!"
+)}
+parse_parameters "${@}"
+update
+binaries
