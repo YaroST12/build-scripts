@@ -18,6 +18,11 @@ export CLANG_TRIPLE="aarch64-linux-gnu-"
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
 CT="${TTHD}/toolchains/clang-8.x/bin/clang"
+# Fucking clear some variables
+KBUILD_COMPILER_STRING=""
+VERSION=""
+REVISION=""
+COMPILER_NAME=""
 
 # Colors
 NC='\033[0m'
@@ -103,23 +108,18 @@ function make_image()
 		make -s -j${cpus} CROSS_COMPILE=${GCC} CROSS_COMPILE_ARM32=${GCC_32} \
 		O=${objdir} Image.gz-dtb
 	else
-		POLLY="-fopenmp \
-			-mllvm -polly \
-			-mllvm -polly-run-dce \
-			-mllvm -polly-parallel \
-			-mllvm -polly-run-inliner \
-			-mllvm -polly-opt-fusion=max \
-			-mllvm -polly-ast-use-context \
-			-mllvm -polly-vectorizer=stripmine"
-
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
 		VERSION=$($CT --version | grep -wo "[0-9].[0-9].[0-9]")
 		# revision (?), usually 6 numbers with 'r' before them
 		REVISION=$($CT --version | grep -wo "r[0-9]*")
-		COMPILER_NAME="Flash-Clang-$VERSION-$REVISION"
+		if [[ -z ${REVISION} ]]; then
+			COMPILER_NAME="Clang-${VERSION}"
+		else
+			COMPILER_NAME="Clang-${VERSION}-${REVISION}"
+		fi
 
 		cd ${kernel_dir}
-		make -s -j${cpus} CC="${CT} ${POLLY}" CROSS_COMPILE=${GCC} \
+		make -s -j${cpus} CC=${CT} CROSS_COMPILE=${GCC} \
 		CROSS_COMPILE_ARM32=${GCC_32} KBUILD_COMPILER_STRING=${COMPILER_NAME} \
 		O=${objdir} Image.gz-dtb
 	fi
