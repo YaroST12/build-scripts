@@ -51,6 +51,7 @@ function parse_parameters() {
 	BUILD_CLEAN=false
 	CONFIG_FILE="z2_row_defconfig"
 	DEVICE="row"
+	VERBOSE=false
 	TC="${YEL}Flash-Clang${LGR}"
 	objdir="${kernel_dir}/out"
 
@@ -68,6 +69,8 @@ function parse_parameters() {
 			"-c"|"--clean")
 				BUILD_CLEAN=true ;;
 
+			"-v"|"--verbose")
+				VERBOSE=true ;;
             *) die "Invalid parameter specified!" ;;
 		esac
 
@@ -102,6 +105,10 @@ function make_image()
 	echo -e ${LGR} "Generating Defconfig ${NC}"
 	make -s ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
 
+	if [ ! $? -eq 0 ]; then
+		die "Defconfig generation failed"
+	fi
+
 	echo -e ${LGR} "Building image ${NC}"
 	if [ ${BUILD_GCC} == true ]; then
 		cd ${kernel_dir}
@@ -133,8 +140,12 @@ function completion()
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb_${DEVICE}
 		echo -e ${LGR} "Build for Z2_$DEVICE competed in" \
 			"$(format_time "${START}" "${END}")!"
-		echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
-		echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME} ${NC}"
+		if [ ${VERBOSE} == true ]; then
+			echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
+			echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME} ${NC}"
+			SIZE=$(ls -s ${builddir}/Image.gz-dtb_${DEVICE} | sed 's/ .*//')
+			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
+		fi
 		echo -e ${LGR} ${SEP}
 	fi
 }
