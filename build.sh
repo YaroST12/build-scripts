@@ -52,7 +52,6 @@ function parse_parameters() {
 	CONFIG_FILE="z2_row_defconfig"
 	DEVICE="row"
 	VERBOSE=false
-	TC="${YEL}Flash-Clang${LGR}"
 	objdir="${kernel_dir}/out"
 
 	while [[ ${#} -ge 1 ]]; do
@@ -63,7 +62,6 @@ function parse_parameters() {
 
 			"-g"|"--gcc")
 				objdir="${kernel_dir}/out_gcc"
-				TC="GCC"
 				BUILD_GCC=true ;;
 
 			"-c"|"--clean")
