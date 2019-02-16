@@ -90,6 +90,10 @@ function format_time() {
 
 function make_image()
 {
+	# After we run savedefconfig in sources folder
+	if [[ -f ${kernel_dir}/.config ]]; then
+		make -s mrproper
+	fi
 	# Needed to make sure we get dtb built and added to kernel image properly
 	# Cleanup existing build files
 	if [ ${BUILD_CLEAN} == true ]; then
