@@ -10,14 +10,14 @@ builddir="${kernel_dir}/build"
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
 export LOCALVERSION="-${branch_name}/${last_commit}"
-export KBUILD_BUILD_USER="ST12"
+export KBUILD_BUILD_USER="Sub2PewDiePie"
 # Fucking arch and clang triple
 export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Fucking toolchains
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CT="${TTHD}/toolchains/clang-8.x/bin/clang"
+CT="${TTHD}/toolchains/clang/clang-r353983b/bin/clang"
 # Fucking clear some variables
 KBUILD_COMPILER_STRING=""
 VERSION=""
@@ -37,14 +37,16 @@ cpus=$(nproc --all)
 # Separator
 SEP="######################################"
 
-function die() {
+function die()
+{
 	echo -e ${RED} ${SEP}
 	echo -e ${RED} "${1}"
 	echo -e ${RED} ${SEP}
 	exit
 }
 
-function parse_parameters() {
+function parse_parameters()
+{
 	PARAMS="${*}"
 	# Default params
 	BUILD_GCC=false
@@ -79,7 +81,8 @@ function parse_parameters() {
 }
 
 # Formats the time for the end
-function format_time() {
+function format_time()
+{
 	MINS=$(((${2} - ${1}) / 60))
 	SECS=$(((${2} - ${1}) % 60))
 
@@ -118,9 +121,10 @@ function make_image()
 		O=${objdir} Image.gz-dtb
 	else
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
-		VERSION=$($CT --version | grep -wo "[0-9].[0-9].[0-9]")
-		# revision (?), usually 6 numbers with 'r' before them
-		REVISION=$($CT --version | grep -wo "r[0-9]*")
+		VERSION=$($CT --version | grep -wom 1 "[0-9].[0-9].[0-9]")
+		# revision, usually 6 numbers with 'r' before them.
+		# can also have a letter at the end.
+		REVISION=$($CT --version | grep -wom 1 "r[0-9]*[a-z]")
 		if [[ -z ${REVISION} ]]; then
 			COMPILER_NAME="Clang-${VERSION}"
 		else
@@ -129,11 +133,12 @@ function make_image()
 
 		cd ${kernel_dir}
 		make -s -j${cpus} CC=${CT} CROSS_COMPILE=${GCC} \
-		CROSS_COMPILE_ARM32=${GCC_32} KBUILD_COMPILER_STRING=${COMPILER_NAME} \
+		CROSS_COMPILE_ARM32=${GCC_32} KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} Image.gz-dtb
 	fi
 	END=$(date +%s)
 }
+
 function completion()
 {
 	cd ${objdir}
@@ -144,7 +149,7 @@ function completion()
 			"$(format_time "${START}" "${END}")!"
 		if [ ${VERBOSE} == true ]; then
 			echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
-			echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME} ${NC}"
+			echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME}"
 			SIZE=$(ls -s ${builddir}/Image.gz-dtb_${DEVICE} | sed 's/ .*//')
 			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
 		fi
