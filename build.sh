@@ -10,19 +10,17 @@ builddir="${kernel_dir}/build"
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
 export LOCALVERSION="-${branch_name}/${last_commit}"
-export KBUILD_BUILD_USER="Sub2PewDiePie"
+export KBUILD_BUILD_USER="yaro"
 # Fucking arch and clang triple
 export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Fucking toolchains
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CT="${TTHD}/toolchains/clang/clang-r353983b/bin/clang"
-# Fucking clear some variables
-KBUILD_COMPILER_STRING=""
-VERSION=""
-REVISION=""
-COMPILER_NAME=""
+CLANG="${TTHD}/toolchains/clang/clang-r377782b/"
+CT_BIN="${CLANG}/bin/"
+CT="${CT_BIN}/clang"
+export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
 
 # Colors
 NC='\033[0m'
@@ -32,11 +30,13 @@ LGR='\033[1;32m'
 YEL='\033[1;33m'
 
 # CPUs
-cpus=$(nproc --all)
+cpus=`expr $(nproc --all)`
+cpus_lto=`expr $(nproc --all) / 2`
 
 # Separator
 SEP="######################################"
 
+# Fucking die
 function die()
 {
 	echo -e ${RED} ${SEP}
@@ -51,24 +51,21 @@ function parse_parameters()
 	# Default params
 	BUILD_GCC=false
 	BUILD_CLEAN=false
-	CONFIG_FILE="z2_row_defconfig"
-	DEVICE="row"
+	#CONFIG_FILE="vendor/neutrino_defconfig"
+	CONFIG_FILE="raphael_defconfig"
 	VERBOSE=false
+	# Cleanup strings
+	VERSION=""
+	REVISION=""
+	COMPILER_NAME=""
 	objdir="${kernel_dir}/out"
 
 	while [[ ${#} -ge 1 ]]; do
 		case ${1} in
-			"-p"|"--plus")
-				DEVICE="plus"
-				CONFIG_FILE="z2_plus_defconfig" ;;
-
 			"-g"|"--gcc")
-				objdir="${kernel_dir}/out_gcc"
 				BUILD_GCC=true ;;
-
 			"-c"|"--clean")
 				BUILD_CLEAN=true ;;
-
 			"-v"|"--verbose")
 				VERBOSE=true ;;
             *) die "Invalid parameter specified!" ;;
@@ -77,7 +74,7 @@ function parse_parameters()
 		shift
 	done
 	echo -e ${LGR} ${SEP}
-	echo -e ${LGR} "Compilation started for Z2_${DEVICE} ${NC}"
+	echo -e ${LGR} "Compilation started${NC}"
 }
 
 # Formats the time for the end
@@ -94,69 +91,87 @@ function format_time()
 function make_image()
 {
 	# After we run savedefconfig in sources folder
-	if [[ -f ${kernel_dir}/.config ]]; then
-		make -s mrproper
+	if [[ -f ${kernel_dir}/.config && ${BUILD_CLEAN} == false ]]; then
+		echo -e ${LGR} "Removing misplaced defconfig... ${NC}"
+		make -s -j${cpus} mrproper
 	fi
 	# Needed to make sure we get dtb built and added to kernel image properly
 	# Cleanup existing build files
 	if [ ${BUILD_CLEAN} == true ]; then
 		echo -e ${LGR} "Cleaning up mess... ${NC}"
 	    rm -rf ${objdir}
-		make -s mrproper
-	else
-	    rm -rf ${objdir}/arch/arm64/boot/
+		make -s -j${cpus} mrproper
 	fi
+
 	START=$(date +%s)
 	echo -e ${LGR} "Generating Defconfig ${NC}"
-	make -s ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
+	make -s -j${cpus} ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
 
 	if [ ! $? -eq 0 ]; then
 		die "Defconfig generation failed"
 	fi
 
-	echo -e ${LGR} "Building image ${NC}"
+	echo -n -e ${LGR} "Building image using${NC}"
 	if [ ${BUILD_GCC} == true ]; then
 		cd ${kernel_dir}
+		echo -e ${LGR} "using GCC${NC}"
 		make -s -j${cpus} CROSS_COMPILE=${GCC} CROSS_COMPILE_ARM32=${GCC_32} \
 		O=${objdir} Image.gz-dtb
 	else
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
-		VERSION=$($CT --version | grep -wom 1 "[0-9].[0-9].[0-9]")
+		VERSION=$($CT --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
 		# revision, usually 6 numbers with 'r' before them.
 		# can also have a letter at the end.
-		REVISION=$($CT --version | grep -wom 1 "r[0-9]*[a-z]")
-		if [[ -z ${REVISION} ]]; then
-			COMPILER_NAME="Clang-${VERSION}"
-		else
+		REVISION=$($CT --version | grep -wom 1 "r[0-99]*[a-z]")
+		if [[ ${REVISION} ]]; then
 			COMPILER_NAME="Clang-${VERSION}-${REVISION}"
+		else
+			COMPILER_NAME="Clang"
 		fi
-
+		echo -e ${YEL} "${COMPILER_NAME} ${NC}"
 		cd ${kernel_dir}
-		make -s -j${cpus} CC=${CT} CROSS_COMPILE=${GCC} \
-		CROSS_COMPILE_ARM32=${GCC_32} KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
+		PATH=${CT_BIN}:${PATH} \
+		make -s -j${cpus} CC="clang -ferror-limit=1" \
+		AR="llvm-ar" \
+		NM="llvm-nm" \
+		OBJCOPY="llvm-objcopy" \
+		OBJDUMP="llvm-objdump" \
+		STRIP="llvm-strip" \
+		CROSS_COMPILE=${GCC} \
+		CROSS_COMPILE_ARM32=${GCC_32} \
+		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} Image.gz-dtb
 	fi
-	END=$(date +%s)
+
+	completion "${START}" "$(date +%s)"
 }
 
 function completion()
 {
 	cd ${objdir}
 	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
+	COMPILED_DTBO=arch/arm64/boot/dtbo.img
+	TIME=$(format_time "${1}" "${2}")
 	if [[ -f ${COMPILED_IMAGE} ]]; then
-		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb_${DEVICE}
-		echo -e ${LGR} "Build for Z2_$DEVICE competed in" \
-			"$(format_time "${START}" "${END}")!"
+		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
+		echo -e ${LGR} "Build competed in" "${TIME}!"
 		if [ ${VERBOSE} == true ]; then
 			echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
 			echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME}"
-			SIZE=$(ls -s ${builddir}/Image.gz-dtb_${DEVICE} | sed 's/ .*//')
+			SIZE=$(ls -s ${builddir}/Image.gz-dtb | sed 's/ .*//')
 			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
 		fi
 		echo -e ${LGR} ${SEP}
+	elif [[ -f ${COMPILED_DTBO} ]]; then
+		mv -f ${COMPILED_DTBO} ${builddir}/dtbo.img
+		echo -e ${LGR} "Compiled dtbo.img in" "${TIME}!"
+		echo -e ${LGR} ${SEP}
+	else
+		echo -e ${RED} ${SEP}
+		echo -e ${RED} "Something went wrong"
+		echo -e ${RED} ${SEP}
 	fi
 }
 parse_parameters "${@}"
 make_image
-completion
 cd ${kernel_dir}
