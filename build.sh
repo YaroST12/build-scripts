@@ -51,6 +51,7 @@ function parse_parameters()
 	# Default params
 	BUILD_GCC=false
 	BUILD_CLEAN=false
+	BUILD_FULL_LTO=false
 	#CONFIG_FILE="vendor/neutrino_defconfig"
 	CONFIG_FILE="raphael_defconfig"
 	VERBOSE=false
@@ -68,6 +69,8 @@ function parse_parameters()
 				BUILD_CLEAN=true ;;
 			"-v"|"--verbose")
 				VERBOSE=true ;;
+			"-lto")
+				BUILD_FULL_LTO=true ;;
             *) die "Invalid parameter specified!" ;;
 		esac
 
@@ -109,6 +112,11 @@ function make_image()
 
 	if [ ! $? -eq 0 ]; then
 		die "Defconfig generation failed"
+	fi
+
+	if [ ${BUILD_FULL_LTO} == true ]; then
+		echo -e ${RED} "Enabling full LTO ${NC}"
+		./scripts/config --file ${objdir}/.config --disable CONFIG_THINLTO
 	fi
 
 	echo -n -e ${LGR} "Building image using${NC}"
@@ -157,7 +165,6 @@ function completion()
 		echo -e ${LGR} "Build competed in" "${TIME}!"
 		if [ ${VERBOSE} == true ]; then
 			echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
-			echo -e ${LGR} "Toolchain: ${YEL}${COMPILER_NAME}"
 			SIZE=$(ls -s ${builddir}/Image.gz-dtb | sed 's/ .*//')
 			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
 		fi
