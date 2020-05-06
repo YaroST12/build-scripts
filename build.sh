@@ -9,7 +9,7 @@ builddir="${kernel_dir}/build"
 # Fucking versioning
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
-export LOCALVERSION="-${branch_name}/${last_commit}"
+version="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="yaro"
 # Fucking arch and clang triple
 export ARCH="arm64"
@@ -17,7 +17,7 @@ export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Fucking toolchains
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CLANG="${TTHD}/toolchains/clang/clang-r377782b/"
+CLANG="${TTHD}/toolchains/clang/clang-r383902/"
 CT_BIN="${CLANG}/bin/"
 CT="${CT_BIN}/clang"
 export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
@@ -53,6 +53,7 @@ function parse_parameters()
 	BUILD_CLEAN=false
 	BUILD_FULL_LTO=false
 	#CONFIG_FILE="vendor/neutrino_defconfig"
+	#CONFIG_FILE="andromeda_defconfig"
 	CONFIG_FILE="raphael_defconfig"
 	VERBOSE=false
 	# Cleanup strings
@@ -130,7 +131,7 @@ function make_image()
 		VERSION=$($CT --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
 		# revision, usually 6 numbers with 'r' before them.
 		# can also have a letter at the end.
-		REVISION=$($CT --version | grep -wom 1 "r[0-99]*[a-z]")
+		REVISION=$($CT --version | grep -wom 1 "r[0-99]*[a-zA-Z0-9]")
 		if [[ ${REVISION} ]]; then
 			COMPILER_NAME="Clang-${VERSION}-${REVISION}"
 		else
@@ -164,7 +165,7 @@ function completion()
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
 		echo -e ${LGR} "Build competed in" "${TIME}!"
 		if [ ${VERBOSE} == true ]; then
-			echo -e ${LGR} "Version: ${YEL}F1xy${LOCALVERSION}"
+			echo -e ${LGR} "Version: ${YEL}F1xy${version}"
 			SIZE=$(ls -s ${builddir}/Image.gz-dtb | sed 's/ .*//')
 			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
 		fi
