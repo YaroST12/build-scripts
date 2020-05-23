@@ -159,7 +159,6 @@ function completion()
 {
 	cd ${objdir}
 	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
-	COMPILED_DTBO=arch/arm64/boot/dtbo.img
 	TIME=$(format_time "${1}" "${2}")
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
@@ -169,10 +168,6 @@ function completion()
 			SIZE=$(ls -s ${builddir}/Image.gz-dtb | sed 's/ .*//')
 			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
 		fi
-		echo -e ${LGR} ${SEP}
-	elif [[ -f ${COMPILED_DTBO} ]]; then
-		mv -f ${COMPILED_DTBO} ${builddir}/dtbo.img
-		echo -e ${LGR} "Compiled dtbo.img in" "${TIME}!"
 		echo -e ${LGR} ${SEP}
 	else
 		echo -e ${RED} ${SEP}
