@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2018 Yaroslav Furman (YaroST12)
+# Copyright (C) 2020 Yaroslav Furman (YaroST12)
 
 # Fucking folders
 kernel_dir="${PWD}"
@@ -17,10 +17,22 @@ export CLANG_TRIPLE="aarch64-linux-gnu-"
 # Fucking toolchains
 GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CLANG="${TTHD}/toolchains/clang/clang-r383902/"
+CLANG="${TTHD}/toolchains/clang/clang-r399163b/"
 CT_BIN="${CLANG}/bin/"
 CT="${CT_BIN}/clang"
+objdir="${kernel_dir}/out"
 export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
+export THINLTO_CACHE=${PWD}/../thinlto_cache
+# Dank gcc flags haha
+FUNNY_FLAGS_HEH=" -finline-functions \
+		-finline-small-functions \
+		-findirect-inlining \
+		-finline-limit=90 \
+		--param=inline-min-speedup=5 \
+		--param=inline-unit-growth=100"
+
+# Which image type to build
+TARGET_IMAGE="Image.gz"
 
 # Colors
 NC='\033[0m'
@@ -30,8 +42,7 @@ LGR='\033[1;32m'
 YEL='\033[1;33m'
 
 # CPUs
-cpus=`expr $(nproc --all)`
-cpus_lto=`expr $(nproc --all) / 2`
+cpus=`expr $(nproc --all) - 1`
 
 # Separator
 SEP="######################################"
@@ -53,14 +64,13 @@ function parse_parameters()
 	BUILD_CLEAN=false
 	BUILD_FULL_LTO=false
 	#CONFIG_FILE="vendor/neutrino_defconfig"
-	#CONFIG_FILE="andromeda_defconfig"
-	CONFIG_FILE="raphael_defconfig"
-	VERBOSE=false
+	#CONFIG_FILE="raphael_defconfig"
+	CONFIG_FILE="vendor/sdmsteppe_defconfig"
+	VERBOSE=true
 	# Cleanup strings
 	VERSION=""
 	REVISION=""
 	COMPILER_NAME=""
-	objdir="${kernel_dir}/out"
 
 	while [[ ${#} -ge 1 ]]; do
 		case ${1} in
@@ -70,6 +80,8 @@ function parse_parameters()
 				BUILD_CLEAN=true ;;
 			"-v"|"--verbose")
 				VERBOSE=true ;;
+			"-dn"|"--donot")
+				FUNNY_FLAGS_HEH="" ;;
 			"-lto")
 				BUILD_FULL_LTO=true ;;
             *) die "Invalid parameter specified!" ;;
@@ -120,12 +132,22 @@ function make_image()
 		./scripts/config --file ${objdir}/.config --disable CONFIG_THINLTO
 	fi
 
+	rm -rf "${objdir}/arch/arm64/boot/dts/qcom"
+	mkdir "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
+
+	if [ -z "${FUNNY_FLAGS_HEH}" ]; then
+		FUNNY_FLAGS_HEH="";
+	fi
+
 	echo -n -e ${LGR} "Building image using${NC}"
 	if [ ${BUILD_GCC} == true ]; then
 		cd ${kernel_dir}
 		echo -e ${LGR} "using GCC${NC}"
-		make -s -j${cpus} CROSS_COMPILE=${GCC} CROSS_COMPILE_ARM32=${GCC_32} \
-		O=${objdir} Image.gz-dtb
+		make -s -j${cpus} \
+		CC="${GCC}gcc ${FUNNY_FLAGS_HEH}" \
+		CROSS_COMPILE=${GCC} \
+		CROSS_COMPILE_ARM32=${GCC_32} \
+		O=${objdir} ${TARGET_IMAGE}
 	else
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
 		VERSION=$($CT --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
@@ -149,24 +171,24 @@ function make_image()
 		CROSS_COMPILE=${GCC} \
 		CROSS_COMPILE_ARM32=${GCC_32} \
 		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
-		O=${objdir} Image.gz-dtb
+		O=${objdir} ${TARGET_IMAGE}
 	fi
-
+#make -s -j${cpus} CC="clang -ferror-limit=1 -g" \
 	completion "${START}" "$(date +%s)"
 }
 
 function completion()
 {
 	cd ${objdir}
-	COMPILED_IMAGE=arch/arm64/boot/Image.gz-dtb
+	COMPILED_IMAGE=arch/arm64/boot/${TARGET_IMAGE}
 	TIME=$(format_time "${1}" "${2}")
 	if [[ -f ${COMPILED_IMAGE} ]]; then
-		mv -f ${COMPILED_IMAGE} ${builddir}/Image.gz-dtb
+		mv -f ${COMPILED_IMAGE} ${builddir}/${TARGET_IMAGE}
 		echo -e ${LGR} "Build competed in" "${TIME}!"
 		if [ ${VERBOSE} == true ]; then
 			echo -e ${LGR} "Version: ${YEL}F1xy${version}"
-			SIZE=$(ls -s ${builddir}/Image.gz-dtb | sed 's/ .*//')
-			echo -e ${LGR} "Img size: ${YEL}${SIZE} kb${NC}"
+			SIZE=$(ls -sh --block-size=K ${builddir}/${TARGET_IMAGE} | sed 's/ .*//')
+			echo -e ${LGR} "Img size: ${YEL}${SIZE}${NC}"
 		fi
 		echo -e ${LGR} ${SEP}
 	else
