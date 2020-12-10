@@ -1,21 +1,23 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2020 Yaroslav Furman (YaroST12)
+# Copyright (C) 2018-2020 Yaroslav Furman (YaroST12)
 
 # Fucking folders
 kernel_dir="${PWD}"
 builddir="${kernel_dir}/build"
+
 # Fucking versioning
 branch_name=$(git rev-parse --abbrev-ref HEAD)
 last_commit=$(git rev-parse --verify --short=10 HEAD)
 version="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="yaro"
+
 # Fucking arch and clang triple
 export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
+
 # Fucking toolchains
-GCC="${TTHD}/toolchains/aarch64-linux-gnu/bin/aarch64-linux-gnu-"
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
 CLANG="${TTHD}/toolchains/clang/clang-r399163b/"
 CT_BIN="${CLANG}/bin/"
@@ -23,6 +25,7 @@ CT="${CT_BIN}/clang"
 objdir="${kernel_dir}/out"
 export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
 export THINLTO_CACHE=${PWD}/../thinlto_cache
+
 # Dank gcc flags haha
 FUNNY_FLAGS_HEH=" -finline-functions \
 		-finline-small-functions \
@@ -47,12 +50,18 @@ cpus=`expr $(nproc --all) - 1`
 # Separator
 SEP="######################################"
 
+# Print
+function print()
+{
+	echo -e ${1} "${2}${NC}"
+}
+
 # Fucking die
 function die()
 {
-	echo -e ${RED} ${SEP}
-	echo -e ${RED} "${1}"
-	echo -e ${RED} ${SEP}
+	print ${RED} ${SEP}
+	print ${RED} "${1}"
+	print ${RED} ${SEP}
 	exit
 }
 
@@ -62,10 +71,11 @@ function parse_parameters()
 	# Default params
 	BUILD_GCC=false
 	BUILD_CLEAN=false
-	BUILD_FULL_LTO=false
+	BUILD_LTO=false
 	#CONFIG_FILE="vendor/neutrino_defconfig"
 	#CONFIG_FILE="raphael_defconfig"
-	CONFIG_FILE="vendor/sdmsteppe_defconfig"
+	#CONFIG_FILE="vendor/sdmsteppe_defconfig"
+	CONFIG_FILE="surya_defconfig"
 	VERBOSE=true
 	# Cleanup strings
 	VERSION=""
@@ -82,15 +92,15 @@ function parse_parameters()
 				VERBOSE=true ;;
 			"-dn"|"--donot")
 				FUNNY_FLAGS_HEH="" ;;
-			"-lto")
-				BUILD_FULL_LTO=true ;;
+			"-l"|"--lto")
+				BUILD_LTO=true ;;
             *) die "Invalid parameter specified!" ;;
 		esac
 
 		shift
 	done
-	echo -e ${LGR} ${SEP}
-	echo -e ${LGR} "Compilation started${NC}"
+	print ${LGR} ${SEP}
+	print ${LGR} "Compilation started"
 }
 
 # Formats the time for the end
@@ -108,44 +118,67 @@ function make_image()
 {
 	# After we run savedefconfig in sources folder
 	if [[ -f ${kernel_dir}/.config && ${BUILD_CLEAN} == false ]]; then
-		echo -e ${LGR} "Removing misplaced defconfig... ${NC}"
+		print ${LGR} "Removing misplaced defconfig... "
 		make -s -j${cpus} mrproper
 	fi
 	# Needed to make sure we get dtb built and added to kernel image properly
 	# Cleanup existing build files
 	if [ ${BUILD_CLEAN} == true ]; then
-		echo -e ${LGR} "Cleaning up mess... ${NC}"
-	    rm -rf ${objdir}
-		make -s -j${cpus} mrproper
+		print ${LGR} "Cleaning up mess... "
+		rm -rf ${objdir}/*
 	fi
 
+	rm -rf "${objdir}/arch/arm64/boot/dts/*"
+	# Warning avoidance, duh
+	mkdir -p "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
+
 	START=$(date +%s)
-	echo -e ${LGR} "Generating Defconfig ${NC}"
+	print ${LGR} "Generating Defconfig "
 	make -s -j${cpus} ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
 
 	if [ ! $? -eq 0 ]; then
 		die "Defconfig generation failed"
 	fi
 
-	if [ ${BUILD_FULL_LTO} == true ]; then
-		echo -e ${RED} "Enabling full LTO ${NC}"
-		./scripts/config --file ${objdir}/.config --disable CONFIG_THINLTO
+# LEAVE IT HERE FOR KERNELS THAT DON'T DO IT AUTOMATICALLY
+#	if [ ${BUILD_GCC} == true ]; then
+#		print ${LGR} "Killing Clang specific crap"
+#		for i in LTO_CLANG CFI_CLANG SHADOW_CALL_STACK RELR LD_LLD; do
+#			./scripts/config --file ${objdir}/.config -d $i
+#		done
+#		make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
+#	fi
+
+	if [ ${BUILD_LTO} == true ]; then
+		print ${LGR} "Enabling ThinLTO"
+		# Check if ThinLTO support is present in defconfig
+		# a bit naive but oh well, good enough
+		SUPPORTS_CLANG=$(grep CONFIG_ARCH_SUPPORTS_THINLTO ${objdir}/.config)
+		if [[ ${SUPPORTS_CLANG} ]]; then
+			# Enable LTO and ThinLTO
+			for i in THINLTO LTO_CLANG; do
+				./scripts/config --file ${objdir}/.config -e $i
+			done
+			# Disable LTO_NONE to avoid a warning message
+			./scripts/config --file ${objdir}/.config -d LTO_NONE
+			# Regen defconfig with all our changes (again)
+			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
+		else
+			print ${RED} "ThinLTO support not present"
+		fi
 	fi
 
-	rm -rf "${objdir}/arch/arm64/boot/dts/qcom"
-	mkdir "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
-
-	if [ -z "${FUNNY_FLAGS_HEH}" ]; then
-		FUNNY_FLAGS_HEH="";
-	fi
-
-	echo -n -e ${LGR} "Building image using${NC}"
 	if [ ${BUILD_GCC} == true ]; then
 		cd ${kernel_dir}
-		echo -e ${LGR} "using GCC${NC}"
+		print ${LGR} "Compiling with GCC"
 		make -s -j${cpus} \
-		CC="${GCC}gcc ${FUNNY_FLAGS_HEH}" \
-		CROSS_COMPILE=${GCC} \
+		AR="aarch64-linux-gnu-ar" \
+		NM="aarch64-linux-gnu-nm" \
+		OBJCOPY="aarch64-linux-gnu-objcopy" \
+		OBJDUMP="aarch64-linux-gnu-objdump" \
+		STRIP="aarch64-linux-gnu-strip" \
+		LD="aarch64-linux-gnu-ld" \
+		CC="aarch64-linux-gnu-gcc ${FUNNY_FLAGS_HEH}" \
 		CROSS_COMPILE_ARM32=${GCC_32} \
 		O=${objdir} ${TARGET_IMAGE}
 	else
@@ -159,16 +192,17 @@ function make_image()
 		else
 			COMPILER_NAME="Clang"
 		fi
-		echo -e ${YEL} "${COMPILER_NAME} ${NC}"
+		print ${LGR} "Compiling with ${YEL}${COMPILER_NAME}"
 		cd ${kernel_dir}
 		PATH=${CT_BIN}:${PATH} \
-		make -s -j${cpus} CC="clang -ferror-limit=1" \
+		make -s -j${cpus} CC="clang -ferror-limit=1 -g" \
 		AR="llvm-ar" \
 		NM="llvm-nm" \
 		OBJCOPY="llvm-objcopy" \
 		OBJDUMP="llvm-objdump" \
 		STRIP="llvm-strip" \
-		CROSS_COMPILE=${GCC} \
+		LD="ld.lld" \
+		CROSS_COMPILE="aarch64-linux-gnu-" \
 		CROSS_COMPILE_ARM32=${GCC_32} \
 		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} ${TARGET_IMAGE}
@@ -184,17 +218,20 @@ function completion()
 	TIME=$(format_time "${1}" "${2}")
 	if [[ -f ${COMPILED_IMAGE} ]]; then
 		mv -f ${COMPILED_IMAGE} ${builddir}/${TARGET_IMAGE}
-		echo -e ${LGR} "Build competed in" "${TIME}!"
+		print ${LGR} "Build competed in ${TIME}!"
+		SIZE=$(ls -s ${builddir}/${TARGET_IMAGE} | sed 's/ .*//')
+#		if [ "${SIZE}" -gt "12556" ]; then
+#			print ${YEL} "Image size too big, it might not boot"
+#		fi
 		if [ ${VERBOSE} == true ]; then
-			echo -e ${LGR} "Version: ${YEL}F1xy${version}"
-			SIZE=$(ls -sh --block-size=K ${builddir}/${TARGET_IMAGE} | sed 's/ .*//')
-			echo -e ${LGR} "Img size: ${YEL}${SIZE}${NC}"
+			print ${LGR} "Version: ${YEL}F1xy${version}"
+			print ${LGR} "Img size: ${YEL}${SIZE}K"
 		fi
-		echo -e ${LGR} ${SEP}
+		print ${LGR} ${SEP}
 	else
-		echo -e ${RED} ${SEP}
-		echo -e ${RED} "Something went wrong"
-		echo -e ${RED} ${SEP}
+		print ${RED} ${SEP}
+		print ${RED} "Something went wrong"
+		print ${RED} ${SEP}
 	fi
 }
 parse_parameters "${@}"
