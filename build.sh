@@ -17,6 +17,9 @@ export KBUILD_BUILD_USER="yaro"
 export ARCH="arm64"
 export CLANG_TRIPLE="aarch64-linux-gnu-"
 
+# Which image type to build
+TARGET_IMAGE="Image.gz-dtb"
+
 # Fucking toolchains
 GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
 CLANG="${TTHD}/toolchains/clang/clang-r399163b/"
@@ -27,15 +30,12 @@ export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
 export THINLTO_CACHE=${PWD}/../thinlto_cache
 
 # Dank gcc flags haha
-FUNNY_FLAGS_HEH=" -finline-functions \
-		-finline-small-functions \
-		-findirect-inlining \
-		-finline-limit=90 \
-		--param=inline-min-speedup=5 \
-		--param=inline-unit-growth=100"
-
-# Which image type to build
-TARGET_IMAGE="Image.gz"
+FUNNY_FLAGS_HEH=" \
+	--param max-inline-insns-single=1000 \
+	--param max-inline-insns-auto=750 \
+	--param large-stack-frame=12288 \
+	--param inline-min-speedup=15 \
+	--param inline-unit-growth=100"
 
 # Colors
 NC='\033[0m'
@@ -45,7 +45,7 @@ LGR='\033[1;32m'
 YEL='\033[1;33m'
 
 # CPUs
-cpus=`expr $(nproc --all) - 1`
+cpus=`expr $(nproc --all)`
 
 # Separator
 SEP="######################################"
@@ -93,7 +93,11 @@ function parse_parameters()
 			"-dn"|"--donot")
 				FUNNY_FLAGS_HEH="" ;;
 			"-l"|"--lto")
-				BUILD_LTO=true ;;
+				BUILD_LTO=true
+				BUILD_GCC=false ;;
+			"-gl"|"--glto")
+				BUILD_LTO=true
+				BUILD_GCC=true ;;
             *) die "Invalid parameter specified!" ;;
 		esac
 
@@ -125,12 +129,16 @@ function make_image()
 	# Cleanup existing build files
 	if [ ${BUILD_CLEAN} == true ]; then
 		print ${LGR} "Cleaning up mess... "
-		rm -rf ${objdir}/*
+		# Warning avoidance, duh
+		# mkdir -p "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
+		make -s -j${cpus} mrproper O=${objdir}
 	fi
 
-	rm -rf "${objdir}/arch/arm64/boot/dts/*"
+	# Ensure that we regenerate dtb EVERY BLOODY TIME
+	# rm -rf "${objdir}/arch/arm64/boot/dts/qcom"
+
 	# Warning avoidance, duh
-	mkdir -p "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
+	# mkdir -p "${objdir}/arch/arm64/boot/dts/" > /dev/null 2>&1
 
 	START=$(date +%s)
 	print ${LGR} "Generating Defconfig "
@@ -149,18 +157,37 @@ function make_image()
 #		make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
 #	fi
 
-	if [ ${BUILD_LTO} == true ]; then
+	if [[ ${BUILD_LTO} == true && ${BUILD_GCC} == true ]]; then
+		print ${LGR} "Enabling GCC LTO"
+		# Check if LDFINAL is present in Makefile
+		# a bit naive but oh well, good enough
+		SUPPORTS_LTO_GCC=$(grep LDFINAL ${kernel_dir}/Makefile)
+		if [[ ${SUPPORTS_LTO_GCC} ]]; then
+			# Enable LTO and ThinLTO
+			for i in LTO LTO_MENU LD_DEAD_CODE_DATA_ELIMINATION; do
+				./scripts/config --file ${objdir}/.config -e $i
+			done
+			for i in KALLSYMS; do
+				./scripts/config --file ${objdir}/.config -d $i
+			done
+			# Regen defconfig with all our changes (again)
+			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
+		else
+			print ${RED} "GCC LTO support not present"
+		fi		
+	elif [ ${BUILD_LTO} == true ]; then
 		print ${LGR} "Enabling ThinLTO"
 		# Check if ThinLTO support is present in defconfig
 		# a bit naive but oh well, good enough
 		SUPPORTS_CLANG=$(grep CONFIG_ARCH_SUPPORTS_THINLTO ${objdir}/.config)
 		if [[ ${SUPPORTS_CLANG} ]]; then
 			# Enable LTO and ThinLTO
-			for i in THINLTO LTO_CLANG; do
+			for i in THINLTO LTO_CLANG LD_LLD; do
 				./scripts/config --file ${objdir}/.config -e $i
 			done
-			# Disable LTO_NONE to avoid a warning message
-			./scripts/config --file ${objdir}/.config -d LTO_NONE
+			for i in LTO_NONE LD_GOLD LD_BFD; do
+				./scripts/config --file ${objdir}/.config -d $i
+			done
 			# Regen defconfig with all our changes (again)
 			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
 		else
@@ -170,16 +197,23 @@ function make_image()
 
 	if [ ${BUILD_GCC} == true ]; then
 		cd ${kernel_dir}
-		print ${LGR} "Compiling with GCC"
+		VERSION=$(gcc --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
+		COMPILER_NAME="GCC-${VERSION}"
+		if [ ${BUILD_LTO} == true ]; then
+			COMPILER_NAME+="+LTO"
+		fi
+		print ${LGR} "Compiling with ${YEL}${COMPILER_NAME}"
 		make -s -j${cpus} \
-		AR="aarch64-linux-gnu-ar" \
-		NM="aarch64-linux-gnu-nm" \
+		AR="${CROSS_COMPILE}gcc-ar" \
+		NM="${CROSS_COMPILE}gcc-nm" \
+		STRIP="${CROSS_COMPILE}gcc-strip" \
 		OBJCOPY="aarch64-linux-gnu-objcopy" \
 		OBJDUMP="aarch64-linux-gnu-objdump" \
-		STRIP="aarch64-linux-gnu-strip" \
 		LD="aarch64-linux-gnu-ld" \
 		CC="aarch64-linux-gnu-gcc ${FUNNY_FLAGS_HEH}" \
+		CROSS_COMPILE="aarch64-linux-gnu-" \
 		CROSS_COMPILE_ARM32=${GCC_32} \
+		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} ${TARGET_IMAGE}
 	else
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
@@ -192,22 +226,26 @@ function make_image()
 		else
 			COMPILER_NAME="Clang"
 		fi
+		if [ ${BUILD_LTO} == true ]; then
+			COMPILER_NAME+="+LTO"
+		fi
 		print ${LGR} "Compiling with ${YEL}${COMPILER_NAME}"
 		cd ${kernel_dir}
 		PATH=${CT_BIN}:${PATH} \
-		make -s -j${cpus} CC="clang -ferror-limit=1 -g" \
+		make -s -j${cpus} \
 		AR="llvm-ar" \
 		NM="llvm-nm" \
+		STRIP="llvm-strip" \
 		OBJCOPY="llvm-objcopy" \
 		OBJDUMP="llvm-objdump" \
-		STRIP="llvm-strip" \
 		LD="ld.lld" \
+		CC="clang" \
 		CROSS_COMPILE="aarch64-linux-gnu-" \
 		CROSS_COMPILE_ARM32=${GCC_32} \
 		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} ${TARGET_IMAGE}
 	fi
-#make -s -j${cpus} CC="clang -ferror-limit=1 -g" \
+
 	completion "${START}" "$(date +%s)"
 }
 
@@ -220,9 +258,6 @@ function completion()
 		mv -f ${COMPILED_IMAGE} ${builddir}/${TARGET_IMAGE}
 		print ${LGR} "Build competed in ${TIME}!"
 		SIZE=$(ls -s ${builddir}/${TARGET_IMAGE} | sed 's/ .*//')
-#		if [ "${SIZE}" -gt "12556" ]; then
-#			print ${YEL} "Image size too big, it might not boot"
-#		fi
 		if [ ${VERBOSE} == true ]; then
 			print ${LGR} "Version: ${YEL}F1xy${version}"
 			print ${LGR} "Img size: ${YEL}${SIZE}K"
