@@ -1,41 +1,44 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2018-2020 Yaroslav Furman (YaroST12)
+# Copyright (C) 2018-2021 Yaroslav Furman (YaroST12)
 
 # Fucking folders
 kernel_dir="${PWD}"
 builddir="${kernel_dir}/build"
 
-# Fucking versioning
-branch_name=$(git rev-parse --abbrev-ref HEAD)
-last_commit=$(git rev-parse --verify --short=10 HEAD)
-version="-${branch_name}/${last_commit}"
+# Fucking versioning (unused)
+# branch_name=$(git rev-parse --abbrev-ref HEAD)
+# last_commit=$(git rev-parse --verify --short=10 HEAD)
+# version="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="yaro"
 
 # Fucking arch and clang triple
 export ARCH="arm64"
-export CLANG_TRIPLE="aarch64-linux-gnu-"
 
 # Which image type to build
 TARGET_IMAGE="Image.gz-dtb"
 
 # Fucking toolchains
-GCC_32="${TTHD}/toolchains/arm-linux-gnueabi/bin/arm-linux-gnueabi-"
-CLANG="${TTHD}/toolchains/clang/clang-r399163b/"
+GCC_32="${TTHD}/toolchains/arm32-gcc/bin/arm-eabi-"
+CLANG="${TTHD}/toolchains/clang/"
+#CLANG="${TTHD}/toolchains/aosp-clang/clang-r399163b/"
 CT_BIN="${CLANG}/bin/"
 CT="${CT_BIN}/clang"
 objdir="${kernel_dir}/out"
-export LD_LIBRARY_PATH=${CLANG}/lib64:$LD_LIBRARY_PATH
 export THINLTO_CACHE=${PWD}/../thinlto_cache
 
 # Dank gcc flags haha
-FUNNY_FLAGS_HEH=" \
-	--param max-inline-insns-single=1000 \
+FUNNY_FLAGS_PRESET_GCC=" \
+	--param max-inline-insns-single=600 \
 	--param max-inline-insns-auto=750 \
 	--param large-stack-frame=12288 \
-	--param inline-min-speedup=15 \
-	--param inline-unit-growth=100"
+	--param inline-min-speedup=5 \
+	--param inline-unit-growth=60"
+
+FUNNY_FLAGS_PRESET_CLANG=" \
+	-mllvm -inline-threshold=600 \
+	-mllvm -inlinehint-threshold=750"
 
 # Colors
 NC='\033[0m'
@@ -69,7 +72,7 @@ function parse_parameters()
 {
 	PARAMS="${*}"
 	# Default params
-	BUILD_GCC=false
+	BUILD_GCC=true
 	BUILD_CLEAN=false
 	BUILD_LTO=false
 	#CONFIG_FILE="vendor/neutrino_defconfig"
@@ -77,10 +80,12 @@ function parse_parameters()
 	#CONFIG_FILE="vendor/sdmsteppe_defconfig"
 	CONFIG_FILE="surya_defconfig"
 	VERBOSE=true
+	RELEASE=false
 	# Cleanup strings
 	VERSION=""
 	REVISION=""
 	COMPILER_NAME=""
+	FUNNY_FLAGS_HEH=""
 
 	while [[ ${#} -ge 1 ]]; do
 		case ${1} in
@@ -90,14 +95,18 @@ function parse_parameters()
 				BUILD_CLEAN=true ;;
 			"-v"|"--verbose")
 				VERBOSE=true ;;
-			"-dn"|"--donot")
-				FUNNY_FLAGS_HEH="" ;;
 			"-l"|"--lto")
 				BUILD_LTO=true
-				BUILD_GCC=false ;;
+				BUILD_GCC=false 
+				FUNNY_FLAGS_HEH=${FUNNY_FLAGS_PRESET_CLANG} ;;
 			"-gl"|"--glto")
 				BUILD_LTO=true
-				BUILD_GCC=true ;;
+				BUILD_GCC=true 
+				FUNNY_FLAGS_HEH=${FUNNY_FLAGS_PRESET_GCC} ;;
+			"-dn"|"--donot")
+				FUNNY_FLAGS_HEH="" ;;
+			"-r")
+				RELEASE=true ;;
             *) die "Invalid parameter specified!" ;;
 		esac
 
@@ -167,9 +176,11 @@ function make_image()
 			for i in LTO LTO_MENU LD_DEAD_CODE_DATA_ELIMINATION; do
 				./scripts/config --file ${objdir}/.config -e $i
 			done
-			for i in KALLSYMS; do
-				./scripts/config --file ${objdir}/.config -d $i
-			done
+			if [ ${RELEASE} == false ]; then
+				for i in KALLSYMS; do
+					./scripts/config --file ${objdir}/.config -d $i
+				done
+			fi
 			# Regen defconfig with all our changes (again)
 			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
 		else
@@ -224,7 +235,7 @@ function make_image()
 		if [[ ${REVISION} ]]; then
 			COMPILER_NAME="Clang-${VERSION}-${REVISION}"
 		else
-			COMPILER_NAME="Clang"
+			COMPILER_NAME="Clang-${VERSION}"
 		fi
 		if [ ${BUILD_LTO} == true ]; then
 			COMPILER_NAME+="+LTO"
@@ -239,9 +250,9 @@ function make_image()
 		OBJCOPY="llvm-objcopy" \
 		OBJDUMP="llvm-objdump" \
 		LD="ld.lld" \
-		CC="clang" \
+		CC="clang ${FUNNY_FLAGS_HEH}" \
 		CROSS_COMPILE="aarch64-linux-gnu-" \
-		CROSS_COMPILE_ARM32=${GCC_32} \
+		CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
 		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
 		O=${objdir} ${TARGET_IMAGE}
 	fi
