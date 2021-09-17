@@ -8,19 +8,19 @@ kernel_dir="${PWD}"
 builddir="${kernel_dir}/build"
 
 # Fucking versioning (unused)
-# branch_name=$(git rev-parse --abbrev-ref HEAD)
-# last_commit=$(git rev-parse --verify --short=10 HEAD)
-# version="-${branch_name}/${last_commit}"
+branch_name=$(git rev-parse --abbrev-ref HEAD)
+last_commit=$(git rev-parse --verify --short=10 HEAD)
+kVersion="-${branch_name}/${last_commit}"
 export KBUILD_BUILD_USER="yaro"
 
-# Fucking arch and clang triple
+# Fucking arch
 export ARCH="arm64"
 
 # Which image type to build
 TARGET_IMAGE="Image.gz-dtb"
 
 # Fucking toolchains
-GCC_32="${TTHD}/toolchains/arm32-gcc/bin/arm-eabi-"
+# GCC_32="${TTHD}/toolchains/arm32-gcc/bin/arm-eabi-"
 CLANG="${TTHD}/toolchains/clang/"
 #CLANG="${TTHD}/toolchains/aosp-clang/clang-r399163b/"
 CT_BIN="${CLANG}/bin/"
@@ -56,7 +56,7 @@ SEP="######################################"
 # Print
 function print()
 {
-	echo -e ${1} "${2}${NC}"
+	echo -e ${1} "\r${2}${NC}"
 }
 
 # Fucking die
@@ -72,18 +72,18 @@ function parse_parameters()
 {
 	PARAMS="${*}"
 	# Default params
-	BUILD_GCC=true
+	BUILD_GCC=false
 	BUILD_CLEAN=false
 	BUILD_LTO=false
-	#CONFIG_FILE="vendor/neutrino_defconfig"
+	CONFIG_FILE="vendor/arrow_alioth_defconfig"
 	#CONFIG_FILE="raphael_defconfig"
+	#CONFIG_FILE="vendor/neutrino_defconfig"
 	#CONFIG_FILE="vendor/sdmsteppe_defconfig"
-	CONFIG_FILE="surya_defconfig"
+	#CONFIG_FILE="surya_defconfig"
 	VERBOSE=true
 	RELEASE=false
 	# Cleanup strings
 	VERSION=""
-	REVISION=""
 	COMPILER_NAME=""
 	FUNNY_FLAGS_HEH=""
 
@@ -127,8 +127,36 @@ function format_time()
 	echo "${TIME_STRING}"
 }
 
+function make_wrapper() {
+	if [ ${BUILD_GCC} == true ]; then
+		make -s -j${cpus} ARCH=${ARCH} \
+		CROSS_COMPILE="aarch64-linux-gnu-" \
+		CROSS_COMPILE_COMPAT="arm-none-eabi-" \
+		CROSS_COMPILE_ARM32="arm-none-eabi-" \
+		CC="aarch64-linux-gnu-gcc ${FUNNY_FLAGS_HEH}" \
+		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
+		O="${objdir}" ${1}
+	else
+		PATH=${CT_BIN}:${PATH} \
+		make -s -j${cpus} \
+		AR="llvm-ar" \
+		NM="llvm-nm" \
+		STRIP="llvm-strip" \
+		OBJCOPY="llvm-objcopy" \
+		OBJDUMP="llvm-objdump" \
+		LD="ld.lld" \
+		CC="clang ${FUNNY_FLAGS_HEH}" \
+		CROSS_COMPILE="aarch64-linux-gnu-" \
+		CROSS_COMPILE_COMPAT="arm-linux-gnueabi-" \
+		CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
+		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
+		O="${objdir}" ${1}
+	fi
+}
+
 function make_image()
 {
+	cd ${kernel_dir}
 	# After we run savedefconfig in sources folder
 	if [[ -f ${kernel_dir}/.config && ${BUILD_CLEAN} == false ]]; then
 		print ${LGR} "Removing misplaced defconfig... "
@@ -151,20 +179,16 @@ function make_image()
 
 	START=$(date +%s)
 	print ${LGR} "Generating Defconfig "
-	make -s -j${cpus} ARCH=${ARCH} O=${objdir} ${CONFIG_FILE}
+	make_wrapper ${CONFIG_FILE}
 
-	if [ ! $? -eq 0 ]; then
-		die "Defconfig generation failed"
-	fi
-
-# LEAVE IT HERE FOR KERNELS THAT DON'T DO IT AUTOMATICALLY
-#	if [ ${BUILD_GCC} == true ]; then
-#		print ${LGR} "Killing Clang specific crap"
-#		for i in LTO_CLANG CFI_CLANG SHADOW_CALL_STACK RELR LD_LLD; do
-#			./scripts/config --file ${objdir}/.config -d $i
-#		done
-#		make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
-#	fi
+	# LEAVE IT HERE FOR KERNELS THAT DON'T DO IT AUTOMATICALLY
+	# if [ ${BUILD_GCC} == true ]; then
+	# 	print ${LGR} "Killing Clang specific crap"
+	# 	for i in LTO_CLANG CFI_CLANG SHADOW_CALL_STACK RELR LD_LLD; do
+	# 		./scripts/config --file ${objdir}/.config -d $i
+	# 	done
+	# 	make_wrapper olddefconfig
+	# fi
 
 	if [[ ${BUILD_LTO} == true && ${BUILD_GCC} == true ]]; then
 		print ${LGR} "Enabling GCC LTO"
@@ -182,7 +206,7 @@ function make_image()
 				done
 			fi
 			# Regen defconfig with all our changes (again)
-			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
+			make_wrapper olddefconfig
 		else
 			print ${RED} "GCC LTO support not present"
 		fi		
@@ -200,61 +224,30 @@ function make_image()
 				./scripts/config --file ${objdir}/.config -d $i
 			done
 			# Regen defconfig with all our changes (again)
-			make -s -j${cpus} ARCH=${ARCH} O=${objdir} olddefconfig
+			make_wrapper olddefconfig
 		else
 			print ${RED} "ThinLTO support not present"
 		fi
 	fi
 
 	if [ ${BUILD_GCC} == true ]; then
-		cd ${kernel_dir}
 		VERSION=$(gcc --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
 		COMPILER_NAME="GCC-${VERSION}"
 		if [ ${BUILD_LTO} == true ]; then
 			COMPILER_NAME+="+LTO"
 		fi
 		print ${LGR} "Compiling with ${YEL}${COMPILER_NAME}"
-		make -s -j${cpus} \
-		AR="${CROSS_COMPILE}gcc-ar" \
-		NM="${CROSS_COMPILE}gcc-nm" \
-		STRIP="${CROSS_COMPILE}gcc-strip" \
-		OBJCOPY="aarch64-linux-gnu-objcopy" \
-		OBJDUMP="aarch64-linux-gnu-objdump" \
-		LD="aarch64-linux-gnu-ld" \
-		CC="aarch64-linux-gnu-gcc ${FUNNY_FLAGS_HEH}" \
-		CROSS_COMPILE="aarch64-linux-gnu-" \
-		CROSS_COMPILE_ARM32=${GCC_32} \
-		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
-		O=${objdir} ${TARGET_IMAGE}
+		make_wrapper ${TARGET_IMAGE}
 	else
 		# major version, usually 3 numbers (8.0.5 or 6.0.1)
 		VERSION=$($CT --version | grep -wom 1 "[0-99][0-99].[0-99].[0-99]")
-		# revision, usually 6 numbers with 'r' before them.
-		# can also have a letter at the end.
-		REVISION=$($CT --version | grep -wom 1 "r[0-99]*[a-zA-Z0-9]")
-		if [[ ${REVISION} ]]; then
-			COMPILER_NAME="Clang-${VERSION}-${REVISION}"
-		else
-			COMPILER_NAME="Clang-${VERSION}"
-		fi
+		COMPILER_NAME="Clang-${VERSION}"
 		if [ ${BUILD_LTO} == true ]; then
 			COMPILER_NAME+="+LTO"
 		fi
 		print ${LGR} "Compiling with ${YEL}${COMPILER_NAME}"
 		cd ${kernel_dir}
-		PATH=${CT_BIN}:${PATH} \
-		make -s -j${cpus} \
-		AR="llvm-ar" \
-		NM="llvm-nm" \
-		STRIP="llvm-strip" \
-		OBJCOPY="llvm-objcopy" \
-		OBJDUMP="llvm-objdump" \
-		LD="ld.lld" \
-		CC="clang ${FUNNY_FLAGS_HEH}" \
-		CROSS_COMPILE="aarch64-linux-gnu-" \
-		CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
-		KBUILD_COMPILER_STRING="${COMPILER_NAME}" \
-		O=${objdir} ${TARGET_IMAGE}
+		make_wrapper ${TARGET_IMAGE}
 	fi
 
 	completion "${START}" "$(date +%s)"
@@ -270,7 +263,7 @@ function completion()
 		print ${LGR} "Build competed in ${TIME}!"
 		SIZE=$(ls -s ${builddir}/${TARGET_IMAGE} | sed 's/ .*//')
 		if [ ${VERBOSE} == true ]; then
-			print ${LGR} "Version: ${YEL}F1xy${version}"
+			print ${LGR} "Version: ${YEL}F1xy${kVersion}"
 			print ${LGR} "Img size: ${YEL}${SIZE}K"
 		fi
 		print ${LGR} ${SEP}
